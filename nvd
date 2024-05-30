@@ -1,0 +1,457 @@
+import pulp
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+import random
+
+G=nx.DiGraph()
+for i in range(5):
+  G.add_node(i, a=10)
+for i in range(4):
+  G.add_edge(i,i+1,a=10)
+  G.add_edge(i+1,i,a=10)
+
+aNode = nx.get_node_attributes(G, "a")
+aEdge = nx.get_edge_attributes(G, "a")
+
+problem=pulp.LpProblem("Exam",pulp.LpMaximize)
+
+
+
+def G_graph():
+    Gs=nx.DiGraph()
+    # Tạo các nút ngẫu nhiên
+    for i in range(random.randrange(2, 6)):
+        r_value = random.randint(1, 5)
+        Gs.add_node(i, r=r_value)
+
+    # Tạo các cạnh ngẫu nhiên
+    for i in list(Gs.nodes)[:-1]:
+        a_value=random.randint(5,10)
+        Gs.add_edge(i, i+1, r=a_value)
+        Gs.add_edge(i+1, i, r=a_value)
+
+    return Gs
+
+K=list()
+for i in range(3):
+  K.append(G_graph())
+
+
+xNode=list()
+xEdge=list()
+for GS in K:
+  xNode.append(
+      pulp.LpVariable.dicts(
+    name=f"xNode{K.index(GS)}",
+    indices=(GS.nodes, G.nodes),
+    cat='Binary'
+)
+)
+  xEdge.append(
+      pulp.LpVariable.dicts(
+    name=f"xEdge{K.index(GS)}",
+    indices=(GS.edges, G.edges),
+    cat='Binary'
+)
+)
+
+
+pi = pulp.LpVariable(
+    name="pi",
+    cat=pulp.LpBinary
+)
+#C1
+for i in G.nodes:
+  problem += (
+      pulp.lpSum(
+          pulp.lpSum(
+              xNode[K.index(k)][v][i] * nx.get_node_attributes(k, "r")[v]
+              for v in k.nodes
+          ) for k in K
+      )
+      <= aNode[i],
+      f"C1_{i}"
+  )
+
+
+#C2
+for i in G.edges:
+  problem += (
+      pulp.lpSum(
+          pulp.lpSum(
+              xEdge[K.index(k)][v][i] * nx.get_edge_attributes(k, "r")[v]
+              for v in k.edges
+          ) for k in K
+      )
+      <= aEdge[i],
+      f"C2_{i}"
+          )
+#C3
+for k in K:
+  for i in G.nodes:
+    problem += (
+      pulp.lpSum(
+              xNode[K.index(k)][v][i]
+              for v in k.nodes 
+          )
+      <=pi,
+      f"C3_{K.index(k)}_{i}"
+      )
+
+#C4
+for k in K:
+  for v in GS.nodes:
+    problem += (
+          pulp.lpSum(
+              xNode[K.index(k)][v][i]
+              for i in G.nodes
+          )
+      ==pi,
+      f"C4_{K.index(k)}_{v}"
+      )
+#C5
+for k in K:
+  for v in k.edges:
+    for i in G.nodes:
+      problem +=(
+          pulp.lpSum(
+              xEdge[K.index(k)][v].get(i,j) - xEdge[K.index(k)][v].get(j,i) for j in G.nodes
+              
+          )
+          == xNode[K.index(k)][v[0]][i]-xNode[K.index(k)][v[1]][i],
+          f"C5_{K.index(k)}_{i}_{v}"
+          )
+      
+print(problem)
+'''
+Exam:
+MAXIMIZE
+None
+SUBJECT TO
+C1_0: xNode0_0_0 + 4 xNode0_1_0 + 4 xNode1_0_0 + 2 xNode1_1_0 + xNode1_2_0
+ + xNode1_3_0 + 4 xNode2_0_0 + 5 xNode2_1_0 <= 10
+
+C1_1: xNode0_0_1 + 4 xNode0_1_1 + 4 xNode1_0_1 + 2 xNode1_1_1 + xNode1_2_1
+ + xNode1_3_1 + 4 xNode2_0_1 + 5 xNode2_1_1 <= 10
+
+C1_2: xNode0_0_2 + 4 xNode0_1_2 + 4 xNode1_0_2 + 2 xNode1_1_2 + xNode1_2_2
+ + xNode1_3_2 + 4 xNode2_0_2 + 5 xNode2_1_2 <= 10
+
+C1_3: xNode0_0_3 + 4 xNode0_1_3 + 4 xNode1_0_3 + 2 xNode1_1_3 + xNode1_2_3
+ + xNode1_3_3 + 4 xNode2_0_3 + 5 xNode2_1_3 <= 10
+
+C1_4: xNode0_0_4 + 4 xNode0_1_4 + 4 xNode1_0_4 + 2 xNode1_1_4 + xNode1_2_4
+ + xNode1_3_4 + 4 xNode2_0_4 + 5 xNode2_1_4 <= 10
+
+C2_(0,_1): 8 xEdge0_(0,_1)_(0,_1) + 8 xEdge0_(1,_0)_(0,_1)
+ + 9 xEdge1_(0,_1)_(0,_1) + 9 xEdge1_(1,_0)_(0,_1) + 9 xEdge1_(1,_2)_(0,_1)
+ + 9 xEdge1_(2,_1)_(0,_1) + 9 xEdge1_(2,_3)_(0,_1) + 9 xEdge1_(3,_2)_(0,_1)
+ + 7 xEdge2_(0,_1)_(0,_1) + 7 xEdge2_(1,_0)_(0,_1) <= 10
+
+C2_(1,_0): 8 xEdge0_(0,_1)_(1,_0) + 8 xEdge0_(1,_0)_(1,_0)
+ + 9 xEdge1_(0,_1)_(1,_0) + 9 xEdge1_(1,_0)_(1,_0) + 9 xEdge1_(1,_2)_(1,_0)
+ + 9 xEdge1_(2,_1)_(1,_0) + 9 xEdge1_(2,_3)_(1,_0) + 9 xEdge1_(3,_2)_(1,_0)
+ + 7 xEdge2_(0,_1)_(1,_0) + 7 xEdge2_(1,_0)_(1,_0) <= 10
+
+C2_(1,_2): 8 xEdge0_(0,_1)_(1,_2) + 8 xEdge0_(1,_0)_(1,_2)
+ + 9 xEdge1_(0,_1)_(1,_2) + 9 xEdge1_(1,_0)_(1,_2) + 9 xEdge1_(1,_2)_(1,_2)
+ + 9 xEdge1_(2,_1)_(1,_2) + 9 xEdge1_(2,_3)_(1,_2) + 9 xEdge1_(3,_2)_(1,_2)
+ + 7 xEdge2_(0,_1)_(1,_2) + 7 xEdge2_(1,_0)_(1,_2) <= 10
+
+C2_(2,_1): 8 xEdge0_(0,_1)_(2,_1) + 8 xEdge0_(1,_0)_(2,_1)
+ + 9 xEdge1_(0,_1)_(2,_1) + 9 xEdge1_(1,_0)_(2,_1) + 9 xEdge1_(1,_2)_(2,_1)
+ + 9 xEdge1_(2,_1)_(2,_1) + 9 xEdge1_(2,_3)_(2,_1) + 9 xEdge1_(3,_2)_(2,_1)
+ + 7 xEdge2_(0,_1)_(2,_1) + 7 xEdge2_(1,_0)_(2,_1) <= 10
+
+C2_(2,_3): 8 xEdge0_(0,_1)_(2,_3) + 8 xEdge0_(1,_0)_(2,_3)
+ + 9 xEdge1_(0,_1)_(2,_3) + 9 xEdge1_(1,_0)_(2,_3) + 9 xEdge1_(1,_2)_(2,_3)
+ + 9 xEdge1_(2,_1)_(2,_3) + 9 xEdge1_(2,_3)_(2,_3) + 9 xEdge1_(3,_2)_(2,_3)
+ + 7 xEdge2_(0,_1)_(2,_3) + 7 xEdge2_(1,_0)_(2,_3) <= 10
+
+C2_(3,_2): 8 xEdge0_(0,_1)_(3,_2) + 8 xEdge0_(1,_0)_(3,_2)
+ + 9 xEdge1_(0,_1)_(3,_2) + 9 xEdge1_(1,_0)_(3,_2) + 9 xEdge1_(1,_2)_(3,_2)
+ + 9 xEdge1_(2,_1)_(3,_2) + 9 xEdge1_(2,_3)_(3,_2) + 9 xEdge1_(3,_2)_(3,_2)
+ + 7 xEdge2_(0,_1)_(3,_2) + 7 xEdge2_(1,_0)_(3,_2) <= 10
+
+C2_(3,_4): 8 xEdge0_(0,_1)_(3,_4) + 8 xEdge0_(1,_0)_(3,_4)
+ + 9 xEdge1_(0,_1)_(3,_4) + 9 xEdge1_(1,_0)_(3,_4) + 9 xEdge1_(1,_2)_(3,_4)
+ + 9 xEdge1_(2,_1)_(3,_4) + 9 xEdge1_(2,_3)_(3,_4) + 9 xEdge1_(3,_2)_(3,_4)
+ + 7 xEdge2_(0,_1)_(3,_4) + 7 xEdge2_(1,_0)_(3,_4) <= 10
+
+C2_(4,_3): 8 xEdge0_(0,_1)_(4,_3) + 8 xEdge0_(1,_0)_(4,_3)
+ + 9 xEdge1_(0,_1)_(4,_3) + 9 xEdge1_(1,_0)_(4,_3) + 9 xEdge1_(1,_2)_(4,_3)
+ + 9 xEdge1_(2,_1)_(4,_3) + 9 xEdge1_(2,_3)_(4,_3) + 9 xEdge1_(3,_2)_(4,_3)
+ + 7 xEdge2_(0,_1)_(4,_3) + 7 xEdge2_(1,_0)_(4,_3) <= 10
+
+C3_0_0: - pi + xNode0_0_0 + xNode0_1_0 <= 0
+
+C3_0_1: - pi + xNode0_0_1 + xNode0_1_1 <= 0
+
+C3_0_2: - pi + xNode0_0_2 + xNode0_1_2 <= 0
+
+C3_0_3: - pi + xNode0_0_3 + xNode0_1_3 <= 0
+
+C3_0_4: - pi + xNode0_0_4 + xNode0_1_4 <= 0
+
+C3_1_0: - pi + xNode1_0_0 + xNode1_1_0 + xNode1_2_0 + xNode1_3_0 <= 0
+
+C3_1_1: - pi + xNode1_0_1 + xNode1_1_1 + xNode1_2_1 + xNode1_3_1 <= 0
+
+C3_1_2: - pi + xNode1_0_2 + xNode1_1_2 + xNode1_2_2 + xNode1_3_2 <= 0
+
+C3_1_3: - pi + xNode1_0_3 + xNode1_1_3 + xNode1_2_3 + xNode1_3_3 <= 0
+
+C3_1_4: - pi + xNode1_0_4 + xNode1_1_4 + xNode1_2_4 + xNode1_3_4 <= 0
+
+C3_2_0: - pi + xNode2_0_0 + xNode2_1_0 <= 0
+
+C3_2_1: - pi + xNode2_0_1 + xNode2_1_1 <= 0
+
+C3_2_2: - pi + xNode2_0_2 + xNode2_1_2 <= 0
+
+C3_2_3: - pi + xNode2_0_3 + xNode2_1_3 <= 0
+
+C3_2_4: - pi + xNode2_0_4 + xNode2_1_4 <= 0
+
+C4_0_0: - pi + xNode0_0_0 + xNode0_0_1 + xNode0_0_2 + xNode0_0_3 + xNode0_0_4
+ = 0
+
+C4_0_1: - pi + xNode0_1_0 + xNode0_1_1 + xNode0_1_2 + xNode0_1_3 + xNode0_1_4
+ = 0
+
+C4_1_0: - pi + xNode1_0_0 + xNode1_0_1 + xNode1_0_2 + xNode1_0_3 + xNode1_0_4
+ = 0
+
+C4_1_1: - pi + xNode1_1_0 + xNode1_1_1 + xNode1_1_2 + xNode1_1_3 + xNode1_1_4
+ = 0
+
+C4_2_0: - pi + xNode2_0_0 + xNode2_0_1 + xNode2_0_2 + xNode2_0_3 + xNode2_0_4
+ = 0
+
+C4_2_1: - pi + xNode2_1_0 + xNode2_1_1 + xNode2_1_2 + xNode2_1_3 + xNode2_1_4
+ = 0
+
+C5_0_0_(0,_1): - xNode0_0_0 + xNode0_1_0 = -10
+
+C5_0_1_(0,_1): - xNode0_0_1 + xNode0_1_1 = -5
+
+C5_0_2_(0,_1): - xNode0_0_2 + xNode0_1_2 = 0
+
+C5_0_3_(0,_1): - xNode0_0_3 + xNode0_1_3 = 5
+
+C5_0_4_(0,_1): - xNode0_0_4 + xNode0_1_4 = 10
+
+C5_0_0_(1,_0): xNode0_0_0 - xNode0_1_0 = -10
+
+C5_0_1_(1,_0): xNode0_0_1 - xNode0_1_1 = -5
+
+C5_0_2_(1,_0): xNode0_0_2 - xNode0_1_2 = 0
+
+C5_0_3_(1,_0): xNode0_0_3 - xNode0_1_3 = 5
+
+C5_0_4_(1,_0): xNode0_0_4 - xNode0_1_4 = 10
+
+C5_1_0_(0,_1): - xNode1_0_0 + xNode1_1_0 = -10
+
+C5_1_1_(0,_1): - xNode1_0_1 + xNode1_1_1 = -5
+
+C5_1_2_(0,_1): - xNode1_0_2 + xNode1_1_2 = 0
+
+C5_1_3_(0,_1): - xNode1_0_3 + xNode1_1_3 = 5
+
+C5_1_4_(0,_1): - xNode1_0_4 + xNode1_1_4 = 10
+
+C5_1_0_(1,_0): xNode1_0_0 - xNode1_1_0 = -10
+
+C5_1_1_(1,_0): xNode1_0_1 - xNode1_1_1 = -5
+
+C5_1_2_(1,_0): xNode1_0_2 - xNode1_1_2 = 0
+
+C5_1_3_(1,_0): xNode1_0_3 - xNode1_1_3 = 5
+
+C5_1_4_(1,_0): xNode1_0_4 - xNode1_1_4 = 10
+
+C5_1_0_(1,_2): - xNode1_1_0 + xNode1_2_0 = -10
+
+C5_1_1_(1,_2): - xNode1_1_1 + xNode1_2_1 = -5
+
+C5_1_2_(1,_2): - xNode1_1_2 + xNode1_2_2 = 0
+
+C5_1_3_(1,_2): - xNode1_1_3 + xNode1_2_3 = 5
+
+C5_1_4_(1,_2): - xNode1_1_4 + xNode1_2_4 = 10
+
+C5_1_0_(2,_1): xNode1_1_0 - xNode1_2_0 = -10
+
+C5_1_1_(2,_1): xNode1_1_1 - xNode1_2_1 = -5
+
+C5_1_2_(2,_1): xNode1_1_2 - xNode1_2_2 = 0
+
+C5_1_3_(2,_1): xNode1_1_3 - xNode1_2_3 = 5
+
+C5_1_4_(2,_1): xNode1_1_4 - xNode1_2_4 = 10
+
+C5_1_0_(2,_3): - xNode1_2_0 + xNode1_3_0 = -10
+
+C5_1_1_(2,_3): - xNode1_2_1 + xNode1_3_1 = -5
+
+C5_1_2_(2,_3): - xNode1_2_2 + xNode1_3_2 = 0
+
+C5_1_3_(2,_3): - xNode1_2_3 + xNode1_3_3 = 5
+
+C5_1_4_(2,_3): - xNode1_2_4 + xNode1_3_4 = 10
+
+C5_1_0_(3,_2): xNode1_2_0 - xNode1_3_0 = -10
+
+C5_1_1_(3,_2): xNode1_2_1 - xNode1_3_1 = -5
+
+C5_1_2_(3,_2): xNode1_2_2 - xNode1_3_2 = 0
+
+C5_1_3_(3,_2): xNode1_2_3 - xNode1_3_3 = 5
+
+C5_1_4_(3,_2): xNode1_2_4 - xNode1_3_4 = 10
+
+C5_2_0_(0,_1): - xNode2_0_0 + xNode2_1_0 = -10
+
+C5_2_1_(0,_1): - xNode2_0_1 + xNode2_1_1 = -5
+
+C5_2_2_(0,_1): - xNode2_0_2 + xNode2_1_2 = 0
+
+C5_2_3_(0,_1): - xNode2_0_3 + xNode2_1_3 = 5
+
+C5_2_4_(0,_1): - xNode2_0_4 + xNode2_1_4 = 10
+
+C5_2_0_(1,_0): xNode2_0_0 - xNode2_1_0 = -10
+
+C5_2_1_(1,_0): xNode2_0_1 - xNode2_1_1 = -5
+
+C5_2_2_(1,_0): xNode2_0_2 - xNode2_1_2 = 0
+
+C5_2_3_(1,_0): xNode2_0_3 - xNode2_1_3 = 5
+
+C5_2_4_(1,_0): xNode2_0_4 - xNode2_1_4 = 10
+
+VARIABLES
+0 <= pi <= 1 Integer
+0 <= xEdge0_(0,_1)_(0,_1) <= 1 Integer
+0 <= xEdge0_(0,_1)_(1,_0) <= 1 Integer
+0 <= xEdge0_(0,_1)_(1,_2) <= 1 Integer
+0 <= xEdge0_(0,_1)_(2,_1) <= 1 Integer
+0 <= xEdge0_(0,_1)_(2,_3) <= 1 Integer
+0 <= xEdge0_(0,_1)_(3,_2) <= 1 Integer
+0 <= xEdge0_(0,_1)_(3,_4) <= 1 Integer
+0 <= xEdge0_(0,_1)_(4,_3) <= 1 Integer
+0 <= xEdge0_(1,_0)_(0,_1) <= 1 Integer
+0 <= xEdge0_(1,_0)_(1,_0) <= 1 Integer
+0 <= xEdge0_(1,_0)_(1,_2) <= 1 Integer
+0 <= xEdge0_(1,_0)_(2,_1) <= 1 Integer
+0 <= xEdge0_(1,_0)_(2,_3) <= 1 Integer
+0 <= xEdge0_(1,_0)_(3,_2) <= 1 Integer
+0 <= xEdge0_(1,_0)_(3,_4) <= 1 Integer
+0 <= xEdge0_(1,_0)_(4,_3) <= 1 Integer
+0 <= xEdge1_(0,_1)_(0,_1) <= 1 Integer
+0 <= xEdge1_(0,_1)_(1,_0) <= 1 Integer
+0 <= xEdge1_(0,_1)_(1,_2) <= 1 Integer
+0 <= xEdge1_(0,_1)_(2,_1) <= 1 Integer
+0 <= xEdge1_(0,_1)_(2,_3) <= 1 Integer
+0 <= xEdge1_(0,_1)_(3,_2) <= 1 Integer
+0 <= xEdge1_(0,_1)_(3,_4) <= 1 Integer
+0 <= xEdge1_(0,_1)_(4,_3) <= 1 Integer
+0 <= xEdge1_(1,_0)_(0,_1) <= 1 Integer
+0 <= xEdge1_(1,_0)_(1,_0) <= 1 Integer
+0 <= xEdge1_(1,_0)_(1,_2) <= 1 Integer
+0 <= xEdge1_(1,_0)_(2,_1) <= 1 Integer
+0 <= xEdge1_(1,_0)_(2,_3) <= 1 Integer
+0 <= xEdge1_(1,_0)_(3,_2) <= 1 Integer
+0 <= xEdge1_(1,_0)_(3,_4) <= 1 Integer
+0 <= xEdge1_(1,_0)_(4,_3) <= 1 Integer
+0 <= xEdge1_(1,_2)_(0,_1) <= 1 Integer
+0 <= xEdge1_(1,_2)_(1,_0) <= 1 Integer
+0 <= xEdge1_(1,_2)_(1,_2) <= 1 Integer
+0 <= xEdge1_(1,_2)_(2,_1) <= 1 Integer
+0 <= xEdge1_(1,_2)_(2,_3) <= 1 Integer
+0 <= xEdge1_(1,_2)_(3,_2) <= 1 Integer
+0 <= xEdge1_(1,_2)_(3,_4) <= 1 Integer
+0 <= xEdge1_(1,_2)_(4,_3) <= 1 Integer
+0 <= xEdge1_(2,_1)_(0,_1) <= 1 Integer
+0 <= xEdge1_(2,_1)_(1,_0) <= 1 Integer
+0 <= xEdge1_(2,_1)_(1,_2) <= 1 Integer
+0 <= xEdge1_(2,_1)_(2,_1) <= 1 Integer
+0 <= xEdge1_(2,_1)_(2,_3) <= 1 Integer
+0 <= xEdge1_(2,_1)_(3,_2) <= 1 Integer
+0 <= xEdge1_(2,_1)_(3,_4) <= 1 Integer
+0 <= xEdge1_(2,_1)_(4,_3) <= 1 Integer
+0 <= xEdge1_(2,_3)_(0,_1) <= 1 Integer
+0 <= xEdge1_(2,_3)_(1,_0) <= 1 Integer
+0 <= xEdge1_(2,_3)_(1,_2) <= 1 Integer
+0 <= xEdge1_(2,_3)_(2,_1) <= 1 Integer
+0 <= xEdge1_(2,_3)_(2,_3) <= 1 Integer
+0 <= xEdge1_(2,_3)_(3,_2) <= 1 Integer
+0 <= xEdge1_(2,_3)_(3,_4) <= 1 Integer
+0 <= xEdge1_(2,_3)_(4,_3) <= 1 Integer
+0 <= xEdge1_(3,_2)_(0,_1) <= 1 Integer
+0 <= xEdge1_(3,_2)_(1,_0) <= 1 Integer
+0 <= xEdge1_(3,_2)_(1,_2) <= 1 Integer
+0 <= xEdge1_(3,_2)_(2,_1) <= 1 Integer
+0 <= xEdge1_(3,_2)_(2,_3) <= 1 Integer
+0 <= xEdge1_(3,_2)_(3,_2) <= 1 Integer
+0 <= xEdge1_(3,_2)_(3,_4) <= 1 Integer
+0 <= xEdge1_(3,_2)_(4,_3) <= 1 Integer
+0 <= xEdge2_(0,_1)_(0,_1) <= 1 Integer
+0 <= xEdge2_(0,_1)_(1,_0) <= 1 Integer
+0 <= xEdge2_(0,_1)_(1,_2) <= 1 Integer
+0 <= xEdge2_(0,_1)_(2,_1) <= 1 Integer
+0 <= xEdge2_(0,_1)_(2,_3) <= 1 Integer
+0 <= xEdge2_(0,_1)_(3,_2) <= 1 Integer
+0 <= xEdge2_(0,_1)_(3,_4) <= 1 Integer
+0 <= xEdge2_(0,_1)_(4,_3) <= 1 Integer
+0 <= xEdge2_(1,_0)_(0,_1) <= 1 Integer
+0 <= xEdge2_(1,_0)_(1,_0) <= 1 Integer
+0 <= xEdge2_(1,_0)_(1,_2) <= 1 Integer
+0 <= xEdge2_(1,_0)_(2,_1) <= 1 Integer
+0 <= xEdge2_(1,_0)_(2,_3) <= 1 Integer
+0 <= xEdge2_(1,_0)_(3,_2) <= 1 Integer
+0 <= xEdge2_(1,_0)_(3,_4) <= 1 Integer
+0 <= xEdge2_(1,_0)_(4,_3) <= 1 Integer
+0 <= xNode0_0_0 <= 1 Integer
+0 <= xNode0_0_1 <= 1 Integer
+0 <= xNode0_0_2 <= 1 Integer
+0 <= xNode0_0_3 <= 1 Integer
+0 <= xNode0_0_4 <= 1 Integer
+0 <= xNode0_1_0 <= 1 Integer
+0 <= xNode0_1_1 <= 1 Integer
+0 <= xNode0_1_2 <= 1 Integer
+0 <= xNode0_1_3 <= 1 Integer
+0 <= xNode0_1_4 <= 1 Integer
+0 <= xNode1_0_0 <= 1 Integer
+0 <= xNode1_0_1 <= 1 Integer
+0 <= xNode1_0_2 <= 1 Integer
+0 <= xNode1_0_3 <= 1 Integer
+0 <= xNode1_0_4 <= 1 Integer
+0 <= xNode1_1_0 <= 1 Integer
+0 <= xNode1_1_1 <= 1 Integer
+0 <= xNode1_1_2 <= 1 Integer
+0 <= xNode1_1_3 <= 1 Integer
+0 <= xNode1_1_4 <= 1 Integer
+0 <= xNode1_2_0 <= 1 Integer
+0 <= xNode1_2_1 <= 1 Integer
+0 <= xNode1_2_2 <= 1 Integer
+0 <= xNode1_2_3 <= 1 Integer
+0 <= xNode1_2_4 <= 1 Integer
+0 <= xNode1_3_0 <= 1 Integer
+0 <= xNode1_3_1 <= 1 Integer
+0 <= xNode1_3_2 <= 1 Integer
+0 <= xNode1_3_3 <= 1 Integer
+0 <= xNode1_3_4 <= 1 Integer
+0 <= xNode2_0_0 <= 1 Integer
+0 <= xNode2_0_1 <= 1 Integer
+0 <= xNode2_0_2 <= 1 Integer
+0 <= xNode2_0_3 <= 1 Integer
+0 <= xNode2_0_4 <= 1 Integer
+0 <= xNode2_1_0 <= 1 Integer
+0 <= xNode2_1_1 <= 1 Integer
+0 <= xNode2_1_2 <= 1 Integer
+0 <= xNode2_1_3 <= 1 Integer
+0 <= xNode2_1_4 <= 1 Integer
+'''
